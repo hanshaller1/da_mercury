@@ -42,7 +42,25 @@ export function encodeWav(audioBuffer) {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
-export function download(blob, name) {
+/**
+ * Offer a file to the user. Inside a claude.ai artifact the sandbox blocks
+ * plain downloads, so the platform's `downloads` capability is used there.
+ * Resolves true when the file was handed over.
+ */
+export async function download(blob, name) {
+  if (window.claude && typeof window.claude.use === 'function') {
+    try {
+      const downloads = await window.claude.use('downloads');
+      if (downloads) {
+        await downloads.save({ filename: name, data: blob });
+        return true;
+      }
+    } catch (err) {
+      if (err && err.code === 'declined') return false;
+      console.warn('download failed', err);
+      return false;
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -51,4 +69,5 @@ export function download(blob, name) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return true;
 }

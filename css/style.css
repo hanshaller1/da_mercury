@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #0b0e12;
   --bg2: #12171d;
   --panel: #171d24;
@@ -924,4 +925,8 @@ dialog menu {
     justify-content: center;
     padding: 0 0 18px;
   }
+}
+
+[hidden] {
+  display: none !important;
 }

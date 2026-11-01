@@ -20,6 +20,20 @@ npm test
 
 Die Tests laufen in Node ≥ 18. Geprüft werden die Engine, die Stabilität und die Performance.
 
+## Veröffentlichte Version
+
+Die App ist auch als claude.ai-Artifact veröffentlicht: https://claude.ai/artifact/2fNqyd9Qg7gen5DJ3mKCuL
+
+Dieses Bundle wird gebaut mit:
+
+```bash
+node tools/build-artifact.mjs
+```
+
+Das Skript schreibt einen eigenständigen Build nach `dist/`. In der gehosteten Version gibt es keinen Mikrofon-Eingang
+und keinen WAV-Export, weil die Sandbox beides nicht erlaubt. Aufnahmen und Preset-Exporte laufen dort über die
+Download-Bestätigung der Plattform.
+
 ## Algorithmen
 
 | Algorithmus | Technik |

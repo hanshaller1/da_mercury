@@ -6,6 +6,19 @@ import { getDemo } from './sources.js';
 import { encodeWav, download } from './wav.js';
 
 const WORKLET_URL = new URL('./worklet/reverb-processor.js', import.meta.url);
+// Hosted inside a sandboxed claude.ai artifact: no microphone, no .wav downloads
+const EMBED = !!document.querySelector('meta[name="dam-embed"]');
+
+async function loadWorklet(context) {
+  try {
+    await context.audioWorklet.addModule(WORKLET_URL);
+  } catch (err) {
+    // some sandboxes refuse module URLs: retry from a blob of the same code
+    const code = await (await fetch(WORKLET_URL)).text();
+    const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    await context.audioWorklet.addModule(blobUrl);
+  }
+}
 const LS_STATE = 'damercury.state.v1';
 const LS_PRESETS = 'damercury.presets.v1';
 
@@ -95,7 +108,7 @@ function send(partial, snap = false) {
 async function initAudio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(WORKLET_URL);
+  await loadWorklet(ctx);
   node = new AudioWorkletNode(ctx, 'reverb-processor', {
     numberOfInputs: 1,
     numberOfOutputs: 1,
@@ -540,11 +553,25 @@ function bindPresets() {
     toast(`Preset „${name}“ gespeichert.`);
   });
 
-  $('#presetDelete').addEventListener('click', () => {
+  let deleteArmed = 0;
+  $('#presetDelete').addEventListener('click', (e) => {
     if (!presetRef || !presetRef.startsWith('u:')) return;
     const idx = +presetRef.split(':')[1];
     const p = userPresets[idx];
-    if (!p || !confirm(`Preset „${p.name}“ löschen?`)) return;
+    if (!p) return;
+    const btn = e.currentTarget;
+    if (!deleteArmed) {
+      // two-step confirmation instead of confirm() (blocked in sandboxes)
+      btn.textContent = 'Wirklich löschen?';
+      deleteArmed = setTimeout(() => {
+        deleteArmed = 0;
+        btn.textContent = 'Löschen';
+      }, 3000);
+      return;
+    }
+    clearTimeout(deleteArmed);
+    deleteArmed = 0;
+    btn.textContent = 'Löschen';
     userPresets.splice(idx, 1);
     store.set(LS_PRESETS, userPresets);
     presetRef = null;
@@ -558,7 +585,7 @@ function bindPresets() {
     const blob = new Blob([JSON.stringify({ format: 'damercury-preset', version: 1, preset: p }, null, 2)], {
       type: 'application/json',
     });
-    download(blob, (presetName || 'preset').replace(/[^\w\- ]+/g, '').trim() + '.json');
+    download(blob, (presetName || 'preset').replace(/[^\w\- ]+/g, '').trim() + '.json').then((ok) => ok && toast('Preset exportiert.'));
   });
 
   $('#presetImport').addEventListener('change', async (e) => {
@@ -731,18 +758,19 @@ function toggleRecording() {
     recDest = ctx.createMediaStreamDestination();
     node.connect(recDest);
   }
-  const types = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'];
+  const types = EMBED
+    ? ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+    : ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'];
   const mimeType = types.find((t) => MediaRecorder.isTypeSupported(t)) || '';
   recorder = new MediaRecorder(recDest.stream, mimeType ? { mimeType, audioBitsPerSecond: 256000 } : undefined);
   recChunks = [];
   recorder.ondataavailable = (e) => e.data.size && recChunks.push(e.data);
   recorder.onstop = () => {
     const type = recorder.mimeType || 'audio/webm';
-    const ext = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
-    download(new Blob(recChunks, { type }), `damercury-${Date.now()}.${ext}`);
+    const ext = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? (EMBED ? 'mp4' : 'm4a') : 'webm';
     $('#recBtn').classList.remove('recording');
     $('#recLabel').textContent = 'Aufnahme';
-    toast('Aufnahme gespeichert.');
+    download(new Blob(recChunks, { type }), `damercury-${Date.now()}.${ext}`).then((ok) => ok && toast('Aufnahme gespeichert.'));
   };
   recorder.start(250);
   $('#recBtn').classList.add('recording');
@@ -763,7 +791,7 @@ async function renderOffline() {
     const tail = state.switches.freeze ? 8 : Math.min(40, p.decay * 1.4 + p.predelay / 1000 + 0.5);
     const length = Math.ceil((buf.duration + tail) * sr);
     const off = new OfflineAudioContext(2, length, sr);
-    await off.audioWorklet.addModule(WORKLET_URL);
+    await loadWorklet(off);
     const st = JSON.parse(JSON.stringify(state));
     st.switches.bypass = false;
     const n = new AudioWorkletNode(off, 'reverb-processor', {
@@ -781,8 +809,7 @@ async function renderOffline() {
     src.start();
     const rendered = await off.startRendering();
     const base = sourceKind === 'file' ? fileLabel.replace(/\.[^.]+$/, '') : 'demo-' + demoId;
-    download(encodeWav(rendered), `${base}-${state.algorithm}.wav`);
-    toast('WAV (24 Bit) gerendert.');
+    if (await download(encodeWav(rendered), `${base}-${state.algorithm}.wav`)) toast('WAV (24 Bit) gerendert.');
   } catch (err) {
     console.error(err);
     toast('Rendern fehlgeschlagen: ' + err.message);
@@ -825,6 +852,10 @@ bindTransport();
 bindKeys();
 renderAll();
 $('#renderBtn').disabled = false;
+if (EMBED) {
+  $('.src-tab[data-src="mic"]').hidden = true;
+  $('#renderBtn').hidden = true;
+}
 
 $('#startBtn').addEventListener('click', async () => {
   $('#startOverlay').classList.add('gone');
