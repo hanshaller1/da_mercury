@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Da Mercury Reverb</title>
+  <meta name="description" content="Hochwertiger algorithmischer Stereo-Hall im Browser: Room, Hall, Plate, Spring, Cathedral, Cloud und Reverse mit Shimmer, Swell, Ducking und Freeze." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23c9d3dc'/%3E%3Ccircle cx='12' cy='11' r='4' fill='%23fff' opacity='.7'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-drop" aria-hidden="true"></span>
+        <div>
+          <div class="brand-name">DA MERCURY</div>
+          <div class="brand-sub">Algorithmic Stereo Reverb</div>
+        </div>
+      </div>
+
+      <div class="presetbar">
+        <button class="icon-btn" id="presetPrev" title="Vorheriges Preset" aria-label="Vorheriges Preset">‹</button>
+        <select id="presetSelect" aria-label="Preset"></select>
+        <button class="icon-btn" id="presetNext" title="Nächstes Preset" aria-label="Nächstes Preset">›</button>
+        <button class="btn" id="presetSave">Speichern</button>
+        <button class="btn ghost" id="presetDelete" title="Benutzer-Preset löschen">Löschen</button>
+        <button class="btn ghost" id="presetExport" title="Aktuellen Sound als JSON exportieren">Export</button>
+        <label class="btn ghost" title="Preset-Datei (JSON) importieren">Import<input type="file" id="presetImport" accept="application/json,.json" hidden /></label>
+      </div>
+    </header>
+
+    <!-- ===================================================== TRANSPORT -->
+    <section class="transport" aria-label="Audioquelle">
+      <div class="src-tabs" role="tablist">
+        <button class="src-tab active" data-src="demo" role="tab">Demo</button>
+        <button class="src-tab" data-src="file" role="tab">Datei</button>
+        <button class="src-tab" data-src="mic" role="tab">Mikrofon / Line</button>
+      </div>
+
+      <div class="src-panel" data-panel="demo">
+        <select id="demoSelect" aria-label="Demo-Sound">
+          <option value="guitar">Gitarre – Arpeggio</option>
+          <option value="keys">Keys – Melodie</option>
+          <option value="drums">Drums – Groove</option>
+          <option value="stabs">Synth – Stabs</option>
+          <option value="snare">Snare – Einzelschläge</option>
+          <option value="impulse">Impuls (Impulsantwort)</option>
+        </select>
+      </div>
+      <div class="src-panel hidden" data-panel="file">
+        <label class="btn" for="fileInput">Audiodatei wählen…</label>
+        <input type="file" id="fileInput" accept="audio/*" hidden />
+        <span class="file-name" id="fileName">oder Datei hierher ziehen</span>
+      </div>
+      <div class="src-panel hidden" data-panel="mic">
+        <button class="btn" id="micBtn">Eingang aktivieren</button>
+        <span class="hint">Kopfhörer verwenden – sonst Rückkopplung!</span>
+      </div>
+
+      <div class="transport-actions">
+        <button class="btn play" id="playBtn" title="Play / Stop (Leertaste)"><span class="play-icon"></span><span id="playLabel">Play</span></button>
+        <button class="btn ghost" id="recBtn" title="Ausgang live aufnehmen"><span class="rec-dot"></span><span id="recLabel">Aufnahme</span></button>
+        <button class="btn ghost" id="renderBtn" title="Aktuelle Quelle offline mit Hall als WAV rendern">WAV rendern</button>
+        <button class="btn ghost" id="panicBtn" title="Hall-Speicher leeren">Clear</button>
+      </div>
+    </section>
+
+    <!-- ===================================================== PEDAL -->
+    <main class="pedal">
+      <div class="screw tl"></div><div class="screw tr"></div><div class="screw bl"></div><div class="screw br"></div>
+
+      <div class="display-wrap">
+        <canvas id="display" aria-label="Display: Spektrum, Nachhallzeit und Pegel"></canvas>
+      </div>
+
+      <div class="algos" id="algoButtons" role="radiogroup" aria-label="Hall-Algorithmus"></div>
+      <p class="algo-desc" id="algoDesc"></p>
+
+      <div class="main-knobs" id="mainKnobs"></div>
+
+      <div class="chain" id="chain" aria-label="Signalkette"></div>
+
+      <div class="sections">
+        <section class="card" data-block="reverb">
+          <h3>Tank</h3>
+          <div class="knob-row" data-knobs="diffusion,loDecay,hiDecay,early"></div>
+        </section>
+        <section class="card" data-block="mod">
+          <h3>Modulation</h3>
+          <div class="knob-row" data-knobs="modRate,modDepth"></div>
+        </section>
+        <section class="card" data-block="pitch">
+          <h3>Pitch / Shimmer <button class="led-toggle" data-switch="pitchOn" aria-label="Pitch an/aus"></button></h3>
+          <div class="knob-row" data-knobs="pitchInterval,pitchAmount"></div>
+          <div class="seg" data-switch-seg="pitchMode">
+            <button data-value="0">Feedback</button><button data-value="1">Input</button>
+          </div>
+        </section>
+        <section class="card" data-block="swell">
+          <h3>Swell <button class="led-toggle" data-switch="swellOn" aria-label="Swell an/aus"></button></h3>
+          <div class="knob-row" data-knobs="swell"></div>
+          <div class="seg" data-switch-seg="swellDry">
+            <button data-value="0">Nur Hall</button><button data-value="1">Alles</button>
+          </div>
+        </section>
+        <section class="card" data-block="drive">
+          <h3>Drive <button class="led-toggle" data-switch="driveOn" aria-label="Drive an/aus"></button></h3>
+          <div class="knob-row" data-knobs="drive"></div>
+        </section>
+        <section class="card" data-block="duck">
+          <h3>Ducking <button class="led-toggle" data-switch="duckOn" aria-label="Ducking an/aus"></button></h3>
+          <div class="knob-row" data-knobs="duck"></div>
+        </section>
+        <section class="card" data-block="eq">
+          <h3>EQ <button class="led-toggle" data-switch="eqOn" aria-label="EQ an/aus"></button></h3>
+          <div class="knob-row" data-knobs="lowCut,highCut"></div>
+        </section>
+        <section class="card" data-block="out">
+          <h3>I/O</h3>
+          <div class="knob-row" data-knobs="inputGain,width,output"></div>
+        </section>
+        <section class="card morph" data-block="morph">
+          <h3>Expression / Morph
+            <span class="morph-btns">
+              <button class="btn tiny" id="snapA" title="Aktuellen Sound als A (Ferse) speichern">A ←</button>
+              <button class="btn tiny" id="snapB" title="Aktuellen Sound als B (Spitze) speichern">→ B</button>
+            </span>
+          </h3>
+          <input type="range" id="morph" min="0" max="1000" value="0" aria-label="Morph zwischen Snapshot A und B" disabled />
+          <div class="morph-labels"><span id="morphA">A: –</span><span id="morphB">B: –</span></div>
+          <p class="morph-hint">Zwei Sounds speichern, dann stufenlos überblenden – wie ein Expression-Pedal.</p>
+        </section>
+      </div>
+
+      <div class="footer-row">
+        <div class="footswitches">
+          <div class="fsw">
+            <span class="led" id="holdLed"></span>
+            <button class="stomp" id="holdBtn" title="Hold/Freeze (H) – kurz: rastend, lang drücken: momentan">HOLD</button>
+          </div>
+          <div class="fsw">
+            <span class="led" id="bypassLed"></span>
+            <button class="stomp" id="bypassBtn" title="Bypass (B)">BYPASS</button>
+            <label class="trails"><input type="checkbox" id="trails" checked /> Trails</label>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="foot">
+      <span>Tastatur: <kbd>Leertaste</kbd> Play · <kbd>B</kbd> Bypass · <kbd>H</kbd> Hold · <kbd>←</kbd>/<kbd>→</kbd> Presets · Doppelklick auf Regler = Standardwert · <kbd>Shift</kbd> beim Ziehen = fein</span>
+    </footer>
+  </div>
+
+  <dialog id="saveDialog">
+    <form method="dialog">
+      <h3>Preset speichern</h3>
+      <input id="saveName" type="text" maxlength="40" placeholder="Name" required />
+      <menu>
+        <button value="cancel" class="btn ghost" formnovalidate>Abbrechen</button>
+        <button value="ok" class="btn">Speichern</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="startOverlay">
+    <button id="startBtn" class="btn big">▶ Audio starten</button>
+    <p>Der Browser erlaubt Audio erst nach einem Klick.</p>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
