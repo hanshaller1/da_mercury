@@ -4,6 +4,7 @@ import { Knob } from './ui/knob.js';
 import { Display } from './ui/display.js';
 import { getDemo } from './sources.js';
 import { encodeWav, download } from './wav.js';
+import { LiveInput } from './live-input.js';
 
 const WORKLET_URL = new URL('./worklet/reverb-processor.js', import.meta.url);
 // Hosted inside a sandboxed claude.ai artifact: no microphone, no .wav downloads
@@ -21,6 +22,9 @@ async function loadWorklet(context) {
 }
 const LS_STATE = 'damercury.state.v1';
 const LS_PRESETS = 'damercury.presets.v1';
+const LS_LIVE = 'damercury.live.v1';
+// switches that describe the setup rather than the sound: never stored in presets
+const RIG_SWITCHES = ['bypass', 'freeze', 'killDry'];
 
 // ======================================================================= state
 const store = {
@@ -98,8 +102,8 @@ let fileBuffer = null;
 let fileLabel = '';
 let playing = false;
 let bufferNode = null;
-let micStream = null;
-let micNode = null;
+let live = null; // LiveInput, created with the AudioContext
+const livePrefs = Object.assign({ inputId: '', routing: '0-1', outputId: '' }, store.get(LS_LIVE, {}));
 
 function send(partial, snap = false) {
   if (node) node.port.postMessage({ type: 'state', state: partial, snap });
@@ -132,6 +136,15 @@ async function initAudio() {
   ctx.onstatechange = () => {
     if (ctx.state === 'suspended') setPlaying(false);
   };
+  live = new LiveInput(ctx, srcGain);
+  live.routing = livePrefs.routing;
+  live.onEnded = () => {
+    toast('Das Eingangsgerät wurde getrennt.');
+    if (sourceKind === 'mic') stop();
+    live.close();
+    refreshDevices();
+  };
+  if (livePrefs.outputId) setOutputDevice(livePrefs.outputId, true);
 }
 
 function stopBuffer() {
@@ -147,10 +160,7 @@ function stopBuffer() {
 }
 
 function stopMic() {
-  if (micNode) micNode.disconnect();
-  micNode = null;
-  if (micStream) micStream.getTracks().forEach((t) => t.stop());
-  micStream = null;
+  if (live) live.close();
 }
 
 function currentBuffer() {
@@ -164,17 +174,16 @@ async function play() {
   if (ctx.state !== 'running') await ctx.resume();
   stopBuffer();
   if (sourceKind === 'mic') {
+    if (EMBED || !LiveInput.supported()) {
+      toast('Live-Eingänge sind hier nicht verfügbar. Bitte die App lokal starten.');
+      return;
+    }
     try {
-      if (!micStream) {
-        micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0 },
-        });
-      }
-      micNode = ctx.createMediaStreamSource(micStream);
-      micNode.connect(srcGain);
+      if (!live.stream) await openLiveInput(livePrefs.inputId);
+      live.connect();
       setPlaying(true);
     } catch (err) {
-      toast('Kein Zugriff auf den Audioeingang: ' + err.message);
+      liveError(err);
       setPlaying(false);
     }
     return;
@@ -194,11 +203,115 @@ async function play() {
 
 function stop() {
   stopBuffer();
-  if (micNode) {
-    micNode.disconnect();
-    micNode = null;
-  }
+  if (live) live.disconnect();
   setPlaying(false);
+}
+
+// ======================================================================= live input
+async function openLiveInput(deviceId) {
+  try {
+    await live.open(deviceId);
+  } catch (err) {
+    // a remembered device may be gone: fall back to the default input
+    if (deviceId && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError')) {
+      livePrefs.inputId = '';
+      await live.open('');
+    } else {
+      throw err;
+    }
+  }
+  livePrefs.inputId = deviceId && live.deviceId === deviceId ? deviceId : livePrefs.inputId;
+  livePrefs.routing = live.routing;
+  store.set(LS_LIVE, livePrefs);
+  await refreshDevices();
+  renderRouting();
+  renderLiveInfo();
+}
+
+function liveError(err) {
+  const msg =
+    err.name === 'NotAllowedError'
+      ? 'Zugriff verweigert. Bitte den Audioeingang in den Browser-Einstellungen erlauben.'
+      : err.name === 'NotFoundError'
+        ? 'Kein Audioeingang gefunden. Ist das Interface angeschlossen?'
+        : err.name === 'NotReadableError'
+          ? 'Das Gerät wird gerade von einer anderen Anwendung blockiert.'
+          : 'Eingang konnte nicht geöffnet werden: ' + err.message;
+  toast(msg);
+  $('#liveInfo').textContent = msg;
+}
+
+async function refreshDevices() {
+  const { inputs, outputs } = await LiveInput.devices();
+  const fill = (sel, list, current, defLabel, prefix) => {
+    sel.innerHTML = '';
+    sel.append(new Option(defLabel, ''));
+    list.forEach((d, i) => sel.append(new Option(d.label || `${prefix} ${i + 1}`, d.deviceId)));
+    sel.value = list.some((d) => d.deviceId === current) ? current : '';
+  };
+  fill($('#inputDevice'), inputs, livePrefs.inputId, 'Standard-Eingang', 'Eingang');
+  fill($('#outputDevice'), outputs, livePrefs.outputId, 'Standard-Ausgang', 'Ausgang');
+  $('#outputDeviceField').hidden = !(ctx ? LiveInput.canSelectOutput(ctx) : 'setSinkId' in AudioContext.prototype);
+}
+
+function renderRouting() {
+  const sel = $('#inputRouting');
+  sel.innerHTML = '';
+  for (const o of live.routingOptions()) sel.append(new Option(o.label, o.value));
+  sel.value = live.routing;
+}
+
+function renderLiveInfo() {
+  if (!live || !live.stream) return;
+  const st = live.settings;
+  const parts = [live.label, live.channels === 1 ? '1 Kanal' : `${live.channels} Kanäle`];
+  if (st.sampleRate) parts.push(`${(st.sampleRate / 1000).toFixed(1)} kHz`);
+  parts.push(`Latenz ≈ ${live.latencyMs()} ms`);
+  $('#liveInfo').textContent = parts.join(' · ');
+}
+
+async function setOutputDevice(id, silent = false) {
+  if (!ctx || !LiveInput.canSelectOutput(ctx)) return;
+  try {
+    await ctx.setSinkId(id || '');
+    livePrefs.outputId = id;
+    store.set(LS_LIVE, livePrefs);
+    if (!silent) toast('Ausgang gewechselt.');
+    renderLiveInfo();
+  } catch (err) {
+    livePrefs.outputId = '';
+    store.set(LS_LIVE, livePrefs);
+    if (!silent) toast('Ausgang konnte nicht gewechselt werden: ' + err.message);
+  }
+}
+
+function bindLiveInput() {
+  $('#inputDevice').addEventListener('change', async (e) => {
+    livePrefs.inputId = e.target.value;
+    store.set(LS_LIVE, livePrefs);
+    if (!ctx || !live.stream) return;
+    try {
+      await openLiveInput(livePrefs.inputId);
+      toast('Eingang: ' + live.label);
+    } catch (err) {
+      liveError(err);
+    }
+  });
+  $('#inputRouting').addEventListener('change', (e) => {
+    livePrefs.routing = e.target.value;
+    store.set(LS_LIVE, livePrefs);
+    if (live) live.setRouting(e.target.value);
+  });
+  $('#outputDevice').addEventListener('change', async (e) => {
+    livePrefs.outputId = e.target.value;
+    store.set(LS_LIVE, livePrefs);
+    await initAudio();
+    setOutputDevice(e.target.value);
+  });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', () => refreshDevices());
+  }
+  if (!EMBED) refreshDevices();
 }
 
 function setPlaying(p) {
@@ -432,9 +545,9 @@ function renderChain() {
 function applyState(s, { name, ref, snap = false } = {}) {
   state.algorithm = s.algorithm;
   Object.assign(state.params, s.params);
-  const keepBypass = state.switches.bypass;
-  const keepFreeze = state.switches.freeze;
-  Object.assign(state.switches, s.switches, { bypass: keepBypass, freeze: keepFreeze });
+  // bypass, hold and kill-dry belong to the rig, not to the sound
+  const keep = { bypass: state.switches.bypass, freeze: state.switches.freeze, killDry: state.switches.killDry };
+  Object.assign(state.switches, s.switches, keep);
   send(JSON.parse(JSON.stringify(state)), snap);
   if (name !== undefined) {
     presetName = name;
@@ -513,7 +626,7 @@ function currentAsPreset(name) {
     name,
     algorithm: state.algorithm,
     params: { ...state.params },
-    switches: Object.fromEntries(Object.entries(state.switches).filter(([k]) => k !== 'bypass' && k !== 'freeze')),
+    switches: Object.fromEntries(Object.entries(state.switches).filter(([k]) => !RIG_SWITCHES.includes(k))),
   };
 }
 
@@ -614,7 +727,7 @@ function bindPresets() {
 }
 
 function currentSwitchesFrom(st) {
-  return Object.fromEntries(Object.entries(st.switches).filter(([k]) => k !== 'bypass' && k !== 'freeze'));
+  return Object.fromEntries(Object.entries(st.switches).filter(([k]) => !RIG_SWITCHES.includes(k)));
 }
 
 // ======================================================================= morph (expression)
@@ -655,7 +768,7 @@ function bindMorph() {
       else params[k] = fromNorm(k, toNorm(k, a.params[k]) * (1 - t) + toNorm(k, b.params[k]) * t);
     }
     const src = t < 0.5 ? a : b;
-    const switches = { ...src.switches, bypass: state.switches.bypass, freeze: state.switches.freeze };
+    const switches = { ...src.switches, bypass: state.switches.bypass, freeze: state.switches.freeze, killDry: state.switches.killDry };
     state.algorithm = src.algorithm;
     Object.assign(state.params, params);
     Object.assign(state.switches, switches);
@@ -682,10 +795,6 @@ function bindTransport() {
     const f = e.target.files[0];
     e.target.value = '';
     if (f) loadFile(f);
-  });
-  $('#micBtn').addEventListener('click', () => {
-    if (playing) stop();
-    else play();
   });
   $('#playBtn').addEventListener('click', () => (playing ? stop() : play()));
   $('#panicBtn').addEventListener('click', () => {
@@ -852,8 +961,9 @@ bindTransport();
 bindKeys();
 renderAll();
 $('#renderBtn').disabled = false;
+bindLiveInput();
 if (EMBED) {
-  $('.src-tab[data-src="mic"]').hidden = true;
+  document.body.classList.add('embed');
   $('#renderBtn').hidden = true;
 }
 

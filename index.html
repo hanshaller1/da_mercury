@@ -38,7 +38,7 @@
       <div class="src-tabs" role="tablist">
         <button class="src-tab active" data-src="demo" role="tab">Demo</button>
         <button class="src-tab" data-src="file" role="tab">Datei</button>
-        <button class="src-tab" data-src="mic" role="tab">Mikrofon / Line</button>
+        <button class="src-tab" data-src="mic" role="tab">Live-Eingang</button>
       </div>
 
       <div class="src-panel" data-panel="demo">
@@ -56,9 +56,23 @@
         <input type="file" id="fileInput" accept="audio/*" hidden />
         <span class="file-name" id="fileName">oder Datei hierher ziehen</span>
       </div>
-      <div class="src-panel hidden" data-panel="mic">
-        <button class="btn" id="micBtn">Eingang aktivieren</button>
-        <span class="hint">Kopfhörer verwenden – sonst Rückkopplung!</span>
+      <div class="src-panel live hidden" data-panel="mic">
+        <div class="live-local">
+          <label class="field">
+            <span>Eingang</span>
+            <select id="inputDevice" aria-label="Eingangsgerät"><option value="">Standard-Eingang</option></select>
+          </label>
+          <label class="field">
+            <span>Kanäle</span>
+            <select id="inputRouting" aria-label="Eingangskanäle"><option value="0-1">Kanal 1/2 · Stereo</option></select>
+          </label>
+          <label class="field" id="outputDeviceField">
+            <span>Ausgang</span>
+            <select id="outputDevice" aria-label="Ausgangsgerät"><option value="">Standard-Ausgang</option></select>
+          </label>
+          <span class="hint" id="liveInfo">Play drücken, um den Eingang freizugeben. Kopfhörer verwenden, sonst gibt es Rückkopplung.</span>
+        </div>
+        <p class="live-embed hint">Der Browser sperrt Live-Eingänge in dieser eingebetteten Version. Für Audio-Interface, Synths und Mikrofon die App lokal starten (<code>npm start</code>).</p>
       </div>
 
       <div class="transport-actions">
@@ -122,6 +136,9 @@
         <section class="card" data-block="out">
           <h3>I/O</h3>
           <div class="knob-row" data-knobs="inputGain,width,output"></div>
+          <div class="seg" data-switch-seg="killDry" title="Kill Dry: nur Hall ausgeben, z. B. für Parallel-/Send-Betrieb am Mixer oder Interface">
+            <button data-value="0">Dry + Wet</button><button data-value="1">Kill Dry</button>
+          </div>
         </section>
         <section class="card morph" data-block="morph">
           <h3>Expression / Morph

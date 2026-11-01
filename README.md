@@ -30,7 +30,7 @@ Dieses Bundle wird gebaut mit:
 node tools/build-artifact.mjs
 ```
 
-Das Skript schreibt einen eigenständigen Build nach `dist/`. In der gehosteten Version gibt es keinen Mikrofon-Eingang
+Das Skript schreibt einen eigenständigen Build nach `dist/`. In der gehosteten Version gibt es keinen Live-Eingang
 und keinen WAV-Export, weil die Sandbox beides nicht erlaubt. Aufnahmen und Preset-Exporte laufen dort über die
 Download-Bestätigung der Plattform.
 
@@ -81,7 +81,8 @@ IN ─┬───────────────────────�
 
 * Synthetische Demos (Gitarre, Keys, Drums, Synth, Snare, Impuls). Es werden keine Samples mitgeliefert.
 * Eigene Audiodatei über den Datei-Dialog oder per Drag & Drop
-* Mikrofon oder Line-In (bitte Kopfhörer verwenden)
+* **Live-Eingang**: Audio-Interface, Synths und Drum-Machines über USB-Audio (z. B. ein Elektron Syntakt), Line-In
+  oder Mikrofon. Details siehe unten.
 * **Aufnahme**: Live-Mitschnitt des Ausgangs (WebM/Opus)
 * **WAV rendern**: Die aktuelle Quelle wird offline inklusive Hall-Tail als 24-Bit-WAV gerendert.
 
@@ -91,6 +92,30 @@ JSON exportieren und importieren.
 Tastatur: `Leertaste` Play/Stop · `B` Bypass · `H` Hold · `←`/`→` Presets · Doppelklick auf einen Regler setzt den
 Standardwert · `Shift` beim Ziehen = Feinregelung
 
+## Live-Eingang: Audio-Interface, Syntakt & Co.
+
+Im Tab **Live-Eingang** auf Play drücken und den Zugriff erlauben. Danach stehen diese Einstellungen zur Verfügung:
+
+* **Eingang**: jedes Audiogerät, das das Betriebssystem kennt (Interface, USB-Synth, Line-In, Mikrofon). Die
+  Sprachverarbeitung des Browsers (Echo- und Rauschunterdrückung, automatische Pegelregelung) ist abgeschaltet.
+* **Kanäle**: bei Mehrkanal-Geräten ein Stereopaar (1/2, 3/4, …) oder ein einzelner Kanal als Mono-Quelle, z. B.
+  eine Gitarre an Input 1. Wie viele Kanäle ankommen, entscheidet der Browser. Chrome und Edge liefern je nach
+  Treiber oft nur die ersten 2.
+* **Ausgang**: das Ausgabegerät, z. B. zurück ins Interface (Chrome/Edge, `AudioContext.setSinkId`).
+* **Kill Dry** (I/O-Bereich): Es wird nur der Hall ausgegeben. Das ist für den Parallelbetrieb gedacht, wenn das
+  Direktsignal schon über das Direct Monitoring des Interfaces oder über das Mischpult läuft.
+* Unter den Auswahlfeldern stehen Gerätename, Kanalzahl, Samplerate und die geschätzte Latenz.
+
+Die Einstellungen werden gespeichert. Wird ein Gerät abgesteckt, aktualisiert sich die Liste automatisch.
+
+Hinweise zum Elektron Syntakt: Unter macOS und Linux erscheint er per USB als class-compliant Audiogerät (Main Out
+L/R). Unter Windows braucht er den Overbridge-Treiber. Alternativ gehen seine Main Outs in die Line-Inputs des
+Interfaces. Für möglichst wenig Latenz eine kleine Puffergröße im Interface-Treiber wählen. Die App läuft mit
+128-Sample-Blöcken.
+
+Live-Eingänge setzen `http://localhost` oder HTTPS voraus. In der eingebetteten Artifact-Version sperrt die Sandbox
+den Zugriff.
+
 ## Projektstruktur
 
 ```
@@ -99,6 +124,7 @@ js/main.js                     App: Audio-Graph, Presets, Morph, Aufnahme, Rende
 js/params.js, js/presets.js    Parameter-Definitionen & Werks-Presets
 js/ui/knob.js, js/ui/display.js  Drehregler & Display (Spektrum, RT60, Meter)
 js/sources.js, js/wav.js       Demo-Synthese, WAV-Encoder
+js/live-input.js               Live-Eingang: Geräte, Kanal-Routing, Latenz
 js/worklet/reverb-processor.js AudioWorklet-Wrapper
 js/dsp/                        DSP-Engine, ohne Web-Audio-Abhängigkeit, in Node testbar
   engine.js   komplette Signalkette

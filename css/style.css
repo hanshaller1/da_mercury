@@ -930,3 +930,59 @@ dialog menu {
 [hidden] {
   display: none !important;
 }
+
+/* ------------------------------------------------------------ live input */
+.src-panel.live {
+  flex: 1 1 520px;
+}
+
+.live-local {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.field span {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field select {
+  max-width: 230px;
+}
+
+#liveInfo {
+  flex-basis: 100%;
+  max-width: none;
+  white-space: normal;
+}
+
+.live-embed {
+  display: none;
+  max-width: 460px;
+  white-space: normal;
+  margin: 0;
+}
+
+.live-embed code {
+  font-family: var(--mono);
+}
+
+body.embed .live-local {
+  display: none;
+}
+
+body.embed .live-embed {
+  display: block;
+}

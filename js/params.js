@@ -48,6 +48,7 @@ export const SWITCHES = {
   pitchMode: 0, // 0 = in the feedback loop (shimmer), 1 = on the input only
   duckOn: false,
   eqOn: true,
+  killDry: false, // output only the reverb (parallel / send use)
 };
 
 export function defaultState() {

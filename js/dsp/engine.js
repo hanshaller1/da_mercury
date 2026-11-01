@@ -129,6 +129,7 @@ export class ReverbEngine {
       duck: [0, 0],
       freeze: [0, 0],
       rtComp: [1, 1],
+      thru: [1, 1],
     };
     this.kFast = 1 - Math.exp(-1 / (SMOOTH_FAST * sr));
     this.kSlow = 1 - Math.exp(-1 / (SMOOTH_SLOW * sr));
@@ -193,7 +194,8 @@ export class ReverbEngine {
     const s = this.s;
     const mix = p.mix;
     s.inGain[1] = dbToGain(p.inputGain);
-    s.dry[1] = Math.min(1, 2 * (1 - mix));
+    s.dry[1] = sw.killDry ? 0 : Math.min(1, 2 * (1 - mix));
+    s.thru[1] = sw.killDry ? 0 : 1;
     s.wet[1] = sw.bypass && !sw.trails ? 0 : Math.min(1, 2 * mix);
     s.send[1] = sw.bypass || sw.freeze ? 0 : 1;
     s.byp[1] = sw.bypass ? 1 : 0;
@@ -300,6 +302,7 @@ export class ReverbEngine {
       const duck = (s.duck[0] += kS * (s.duck[1] - s.duck[0]));
       const freeze = (s.freeze[0] += kS * (s.freeze[1] - s.freeze[0]));
       const rtComp = (s.rtComp[0] += kS * (s.rtComp[1] - s.rtComp[0]));
+      const thru = (s.thru[0] += kF * (s.thru[1] - s.thru[0]));
 
       const rawL = inL[i];
       const rawR = inR[i];
@@ -410,8 +413,8 @@ export class ReverbEngine {
 
       // --- mix & output
       const wet = wetG * dg * outG * rtComp;
-      let yL = (1 - byp) * dryL * dryG * outG + byp * xL + wL * wet;
-      let yR = (1 - byp) * dryR * dryG * outG + byp * xR + wR * wet;
+      let yL = (1 - byp) * dryL * dryG * outG + byp * xL * thru + wL * wet;
+      let yR = (1 - byp) * dryR * dryG * outG + byp * xR * thru + wR * wet;
 
       // transparent below -1 dBFS, soft knee above
       const aL = Math.abs(yL);
