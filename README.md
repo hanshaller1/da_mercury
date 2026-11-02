@@ -20,7 +20,15 @@ npm test
 
 Die Tests laufen in Node ≥ 18. Geprüft werden die Engine, die Stabilität und die Performance.
 
-## Veröffentlichte Version
+## Online
+
+**GitHub Pages (volle Version inkl. Live-Eingang):** https://hanshaller1.github.io/da_mercury/
+
+Jeder Push auf den Standard-Branch startet `.github/workflows/pages.yml`. Der Workflow führt die Tests aus und
+veröffentlicht danach die Seite. Damit das klappt, muss Pages einmalig unter *Settings → Pages → Build and deployment →
+Source: GitHub Actions* aktiviert sein.
+
+## Veröffentlichte Version (claude.ai)
 
 Die App ist auch als claude.ai-Artifact veröffentlicht: https://claude.ai/artifact/2fNqyd9Qg7gen5DJ3mKCuL
 
